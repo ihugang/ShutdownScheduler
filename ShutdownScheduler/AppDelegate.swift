@@ -7,6 +7,7 @@ import Foundation
 class StatusItemView: NSView {
     private var timeLabel: NSTextField!
     private var iconView: NSImageView!
+    private var backgroundView: NSView!
     
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -22,18 +23,24 @@ class StatusItemView: NSView {
         // 计算垂直居中的Y坐标
         let centerY = (frame.height - 18) / 2
         
+        // 创建不透明背景图层
+        backgroundView = NSView(frame: NSRect(x: 0, y: 0, width: frame.width, height: frame.height))
+        backgroundView.wantsLayer = true
+        backgroundView.layer?.backgroundColor = NSColor.darkGray.cgColor
+        addSubview(backgroundView)
+        
         // 创建图标视图 - 将图标放在最左边
         iconView = NSImageView(frame: NSRect(x: 8, y: centerY, width: 18, height: 18))
         iconView.imageScaling = .scaleProportionallyDown
         addSubview(iconView)
         
-        // 创建时间标签 - 调整位置使其更靠近图标
+        // 创建时间标签
         timeLabel = NSTextField(frame: NSRect(x: 26, y: centerY, width: 50, height: 18))
         timeLabel.isEditable = false
         timeLabel.isBordered = false
         timeLabel.drawsBackground = false
         timeLabel.font = NSFont.boldSystemFont(ofSize: 12)
-        timeLabel.textColor = NSColor.systemBlue
+        timeLabel.textColor = NSColor.white  // 使用白色文字
         timeLabel.alignment = .left
         addSubview(timeLabel)
     }
@@ -144,8 +151,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// 显示倒计时状态
     private func displayCountdownView(time: String, icon: NSImage?) {
-        // 清除之前的内容
+        // 先彻底清除之前的内容
         statusItem?.button?.subviews.forEach { $0.removeFromSuperview() }
+        statusItem?.button?.image = nil
+        statusItem?.button?.title = ""
+        
+        // 使用黑色样式
+        if let button = statusItem?.button {
+            button.appearance = NSAppearance(named: .darkAqua)
+        }
         
         // 设置固定长度
         statusItem?.length = 90
@@ -154,17 +168,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let view = StatusItemView(frame: NSRect(x: 0, y: 0, width: 90, height: 22))
         statusItemView = view
         
-        // 隐藏原始图标
-        statusItem?.button?.image = nil
-        statusItem?.button?.title = ""
-        
-        // 添加倒计时视图
-        statusItem?.button?.addSubview(view)
-        
-        // 更新倒计时信息
-        view.update(time: time, icon: icon)
-        
-        print("[调试] 显示倒计时: 时间=\(time)")
+        // 使用延迟添加视图，确保界面已清除
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.statusItem?.button?.addSubview(view)
+            view.update(time: time, icon: icon)
+            print("[调试] 显示倒计时: 时间=\(time)")
+        }
     }
     
     @objc func togglePopover(_ sender: AnyObject?) {

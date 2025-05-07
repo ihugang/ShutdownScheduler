@@ -117,10 +117,16 @@ struct ContentView: View {
                     Button("开始倒计时") {
                         executeAction(minutes: minutes, actionType: selectedAction)
                     }
+                    .buttonStyle(PlainButtonStyle())
                     .foregroundColor(.white)
                     .padding(.vertical, 8)
                     .padding(.horizontal, 20)
-                    .background(Color.blue)
+                    .background(
+                        // 使用ZStack确保只有一层背景
+                        ZStack {
+                            Color.blue
+                        }
+                    )
                     .cornerRadius(8)
                     .padding(.top, 5)
                 }
