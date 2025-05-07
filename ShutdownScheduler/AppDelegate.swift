@@ -84,24 +84,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: contentView)
         
+        // 注册强制重置通知
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleForceReset),
+            name: Notification.Name("ForceStatusItemReset"),
+            object: nil
+        )
+        
         // 创建状态栏图标
         createStatusItem()
+    }
+    
+    @objc func handleForceReset() {
+        print("[调试] 接收到强制重置通知")
+        
+        // 停止定时器
+        stopMenuBarUpdateTimer()
+        
+        // 强制重置状态变量
+        isCountingDown = false
+        remainingSeconds = 0
+        
+        // 强制删除并重建状态栏
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.displayNormalStatusItem()
+        }
     }
     
     // MARK: - 倒计时状态更改回调
     func handleCountdownStateChange(isCountingDown: Bool, remainingSeconds: Int, selectedAction: String) {
         print("[调试] 倒计时状态更改: isCountingDown=\(isCountingDown), remainingSeconds=\(remainingSeconds), selectedAction=\(selectedAction)")
         
+        // 停止任何正在进行的定时器和延迟操作
+        stopMenuBarUpdateTimer()
+        
+        // 设置状态变量
         self.isCountingDown = isCountingDown
         self.remainingSeconds = remainingSeconds
         self.selectedAction = selectedAction
         
-        if isCountingDown {
-            startMenuBarUpdateTimer()
-            updateMenuBarDisplay() // 立即更新显示
-        } else {
-            stopMenuBarUpdateTimer()
-            displayNormalStatusItem() // 显示正常状态
+        // 立即清除状态栏显示
+        DispatchQueue.main.async {
+            self.statusItem?.button?.subviews.forEach { $0.removeFromSuperview() }
+            self.statusItemView = nil
+            
+            // 根据状态选择显示方式
+            if isCountingDown {
+                self.startMenuBarUpdateTimer()
+                self.updateMenuBarDisplay() // 立即更新显示
+            } else {
+                self.displayNormalStatusItem() // 显示正常状态
+            }
         }
     }
     
@@ -135,44 +170,95 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// 显示正常状态（非倒计时状态）
     private func displayNormalStatusItem() {
-        // 移除所有自定义视图
-        statusItem?.button?.subviews.forEach { $0.removeFromSuperview() }
+        print("[调试] 开始恢复正常状态...")
         
-        // 恢复为正常图标
-        statusItem?.button?.image = originalIcon
-        statusItem?.button?.title = ""
-        statusItem?.length = NSStatusItem.variableLength
+        // 最彻底的解决方案: 完全移除旧状态栏并创建新的
+        if let oldItem = statusItem {
+            NSStatusBar.system.removeStatusItem(oldItem)
+        }
+        
+        // 创建新的状态栏项
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        
+        // 加载图标
+        var icon: NSImage? = nil
+        
+        // 先尝试加载自定义图标
+        if let customIcon = NSImage(named: "icon_white") {
+            icon = customIcon
+        } else {
+            // 使用系统图标
+            icon = NSImage(systemSymbolName: "power", accessibilityDescription: "Shutdown")
+        }
+        
+        icon?.size = NSSize(width: 18, height: 18)
+        originalIcon = icon
+        
+        // 设置状态栏图标
+        statusItem?.button?.image = icon
+        
+        // 设置点击动作
+        statusItem?.button?.action = #selector(togglePopover(_:))
         
         // 清理引用
         statusItemView = nil
         
-        print("[调试] 恢复正常状态显示")
+        print("[调试] 恢复正常状态显示 - 完成")
     }
     
     /// 显示倒计时状态
     private func displayCountdownView(time: String, icon: NSImage?) {
-        // 先彻底清除之前的内容
-        statusItem?.button?.subviews.forEach { $0.removeFromSuperview() }
-        statusItem?.button?.image = nil
-        statusItem?.button?.title = ""
-        
-        // 使用黑色样式
-        if let button = statusItem?.button {
-            button.appearance = NSAppearance(named: .darkAqua)
+        // 当前状态是否倒计时
+        if !isCountingDown {
+            print("[调试] 已取消显示倒计时，当前不在倒计时状态")
+            return
         }
         
-        // 设置固定长度
-        statusItem?.length = 90
-        
-        // 创建自定义视图
-        let view = StatusItemView(frame: NSRect(x: 0, y: 0, width: 90, height: 22))
-        statusItemView = view
-        
-        // 使用延迟添加视图，确保界面已清除
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            self.statusItem?.button?.addSubview(view)
-            view.update(time: time, icon: icon)
-            print("[调试] 显示倒计时: 时间=\(time)")
+        // 在全局队列中执行，确保与其他状态同步
+        DispatchQueue.global().async {
+            // 再次检查状态，可能已经变化
+            if !self.isCountingDown {
+                print("[调试] 再次取消显示倒计时，状态已改变")
+                return
+            }
+            
+            // 在主线程中更新UI
+            DispatchQueue.main.async {
+                // 再次最终检查
+                if !self.isCountingDown {
+                    print("[调试] 最终取消显示倒计时，状态已改变")
+                    return
+                }
+                
+                // 先彻底清除之前的内容
+                self.statusItem?.button?.subviews.forEach { $0.removeFromSuperview() }
+                self.statusItem?.button?.image = nil
+                self.statusItem?.button?.title = ""
+                
+                // 使用黑色样式
+                if let button = self.statusItem?.button {
+                    button.appearance = NSAppearance(named: .darkAqua)
+                }
+                
+                // 设置固定长度
+                self.statusItem?.length = 90
+                
+                // 创建自定义视图
+                let view = StatusItemView(frame: NSRect(x: 0, y: 0, width: 90, height: 22))
+                self.statusItemView = view
+                
+                print("[调试] 准备显示倒计时状态，当前状态: \(self.isCountingDown)")
+                
+                // 再次确认状态，可能在延迟期间状态变化
+                if self.isCountingDown {
+                    self.statusItem?.button?.addSubview(view)
+                    view.update(time: time, icon: icon)
+                    print("[调试] 显示倒计时: 时间=\(time)")
+                } else {
+                    print("[调试] 最后一刻取消显示倒计时状态")
+                    self.displayNormalStatusItem()
+                }
+            }
         }
     }
     
@@ -192,12 +278,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 停止现有定时器（如果有）
         stopMenuBarUpdateTimer()
         
+        // 如果不在倒计时状态，不启动定时器
+        if !isCountingDown {
+            print("[调试] 取消启动定时器，因为当前不在倒计时状态")
+            return
+        }
+        
         print("[调试] 启动菜单栏更新定时器")
         
         // 创建新定时器，每秒更新一次
-        menuBarUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            print("[调试] 定时器触发更新菜单栏，倒计时: \(self.remainingSeconds)")
+        menuBarUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate() // 自我清理
+                return
+            }
+            
+            // 再次检查状态，防止在非倒计时状态下更新
+            if !self.isCountingDown {
+                timer.invalidate()
+                self.menuBarUpdateTimer = nil
+                print("[调试] 定时器自动停止，当前状态不再倒计时")
+                self.displayNormalStatusItem() // 强制恢复正常状态
+                return
+            }
+            
             self.updateMenuBarDisplay()
         }
         
@@ -207,47 +311,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     // 停止菜单栏更新定时器
     func stopMenuBarUpdateTimer() {
-        menuBarUpdateTimer?.invalidate()
-        menuBarUpdateTimer = nil
+        // 在主线程停止定时器
+        DispatchQueue.main.async {
+            // 取消所有正在的延迟调用
+            DispatchQueue.main.async {
+                self.menuBarUpdateTimer?.invalidate()
+                self.menuBarUpdateTimer = nil
+                print("[调试] 偏然停止所有菜单栏定时器")
+            }
+        }
     }
     
     // 更新菜单栏显示
     private func updateMenuBarDisplay() {
-        if isCountingDown {
-            // 如果正在倒计时
-            // 格式化倒计时时间
-            let minutes = remainingSeconds / 60
-            let seconds = remainingSeconds % 60
-            let formattedTime = String(format: "%d:%02d", minutes, seconds)
-            
-            // 准备图标
-            var icon: NSImage? = nil
-            if selectedAction == "关机" {
-                // 关机模式
-                let powerIcon = NSImage(systemSymbolName: "power", accessibilityDescription: "Shutdown")
-                powerIcon?.size = NSSize(width: 18, height: 18)
-                icon = powerIcon
-            } else {
-                // 休眠模式
-                let sleepIcon = NSImage(systemSymbolName: "moon.fill", accessibilityDescription: "Sleep")
-                sleepIcon?.size = NSSize(width: 18, height: 18)
-                icon = sleepIcon
-            }
-            
-            // 在主线程中更新UI
-            DispatchQueue.main.async {
-                if self.statusItemView != nil {
-                    // 只更新已有视图的内容
-                    self.statusItemView?.update(time: formattedTime, icon: icon)
-                } else {
-                    // 首次显示倒计时
-                    self.displayCountdownView(time: formattedTime, icon: icon)
-                }
-            }
-        } else {
-            // 如果不在倒计时，恢复原始状态
+        // 进行安全检查，确保当前真的在倒计时状态
+        if !isCountingDown {
+            print("[调试] 取消菜单栏更新，当前不在倒计时状态")
+            // 强制恢复正常状态
             DispatchQueue.main.async {
                 self.displayNormalStatusItem()
+            }
+            return
+        }
+        
+        // 如果正在倒计时
+        // 格式化倒计时时间
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        let formattedTime = String(format: "%d:%02d", minutes, seconds)
+        
+        // 准备图标
+        var icon: NSImage? = nil
+        if selectedAction == "关机" {
+            // 关机模式
+            let powerIcon = NSImage(systemSymbolName: "power", accessibilityDescription: "Shutdown")
+            powerIcon?.size = NSSize(width: 18, height: 18)
+            icon = powerIcon
+        } else {
+            // 休眠模式
+            let sleepIcon = NSImage(systemSymbolName: "moon.fill", accessibilityDescription: "Sleep")
+            sleepIcon?.size = NSSize(width: 18, height: 18)
+            icon = sleepIcon
+        }
+        
+        // 在主线程中更新UI，但再次检查状态
+        DispatchQueue.main.async {
+            // 最终一次检查状态
+            if !self.isCountingDown {
+                print("[调试] 取消菜单栏更新，在开始显示前检测到状态变化")
+                self.displayNormalStatusItem()
+                return
+            }
+            
+            if self.statusItemView != nil {
+                // 只更新已有视图的内容
+                self.statusItemView?.update(time: formattedTime, icon: icon)
+            } else {
+                // 首次显示倒计时
+                self.displayCountdownView(time: formattedTime, icon: icon)
             }
         }
     }

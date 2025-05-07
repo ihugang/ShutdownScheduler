@@ -44,6 +44,7 @@ struct ContentView: View {
                         cancelAction()
                     }
                     .foregroundColor(.white)
+                    .buttonStyle(PlainButtonStyle())
                     .padding(.vertical, 8)
                     .padding(.horizontal, 20)
                     .background(Color.red)
@@ -227,6 +228,21 @@ struct ContentView: View {
     
     // 请求管理员权限并执行命令
     func requestAdminPrivilegesAndExecute(command: String, actionName: String, secondsDelay: Int) {
+        // 先重置状态，确保处于非倒计时状态
+        countdownStateChanged?(false, 0, selectedAction) // 强制通知AppDelegate重置statusItem
+        isCountingDown = false
+        stopCountdown()
+        
+        // 等待状态清除
+        let group = DispatchGroup()
+        group.enter()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            group.leave()
+        }
+        
+        group.wait()
+        
         // 执行命令
         logger.info("执行命令: \(command)")
         let script = """
@@ -240,12 +256,44 @@ struct ContentView: View {
         appendToCommandOutput("执行命令: \(command)")
         appendToCommandOutput("结果: \(result.output)")
         
-        if result.success {
+        // 检测是否取消了权限请求
+        if result.output == "USER_CANCELED" {
+            feedback = "您取消了管理员权限请求"
+            
+            // 再次确保重置状态
+            let notificationName = Notification.Name("ForceStatusItemReset")
+            NotificationCenter.default.post(name: notificationName, object: nil) // 发送强制重置通知
+            
+            DispatchQueue.main.async {
+                self.countdownStateChanged?(false, 0, self.selectedAction)
+                self.isCountingDown = false
+                self.stopCountdown()
+            }
+            
+            return
+        }
+        
+        // 检查启动倒计时的条件
+        if result.success && !result.output.isEmpty {
+            // 成功执行命令，启动倒计时
             feedback = "已设置 \(secondsDelay / 60) 分钟后\(actionName)"
-            // 开始倒计时
-            startCountdown(seconds: secondsDelay, actionType: .shutdown)
+            
+            // 清空之前的任何倒计时状态
+            stopCountdown()
+            
+            // 等待一小段时间再开始倒计时，确保上一次的状态已清除
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // 开始新的倒计时
+                self.startCountdown(seconds: secondsDelay, actionType: .shutdown)
+            }
         } else {
-            feedback = "命令执行失败: \(result.output)"
+            // 执行失败
+            feedback = "命令执行失败"
+            
+            // 确保再次重置状态
+            countdownStateChanged?(false, 0, selectedAction)
+            isCountingDown = false
+            stopCountdown()
         }
     }
 
@@ -567,29 +615,34 @@ struct ContentView: View {
 
     // 运行AppleScript并返回结果
     func runAppleScript(script: String) -> (success: Bool, output: String) {
-        // 使用Process而不是NSAppleScript来执行AppleScript，完全避免优先级反转
-        let process = Process()
-        process.launchPath = "/usr/bin/osascript"
-        process.arguments = ["-e", script]
+        // 使用NSAppleScript更可靠地处理取消操作
+        let appleScript = NSAppleScript(source: script)
+        var errorDict: NSDictionary?
+        let descriptor = appleScript?.executeAndReturnError(&errorDict)
         
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = outputPipe
-        
-        do {
-            try process.run()
+        // 如果有错误，检查是否是取消操作
+        if let errorDict = errorDict, let error = errorDict[NSAppleScript.errorNumber] as? NSNumber {
+            let errorCode = error.intValue
+            let errorMessage = errorDict[NSAppleScript.errorMessage] as? String ?? "未知错误"
             
-            // 使用数据而不是等待进程完成
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: outputData, encoding: .utf8) ?? ""
+            // -128 是用户取消操作的错误代码
+            if errorCode == -128 {
+                self.logger.info("用户取消了操作")
+                return (false, "USER_CANCELED")
+            }
             
-            // 注意：我们不使用waitUntilExit()，因为这可能导致优先级反转
-            return (true, output)
-        } catch {
-            let errorInfo = "错误: \(error)"
-            self.logger.error("\(errorInfo)")
-            return (false, errorInfo)
+            self.logger.error("错误\(errorCode): \(errorMessage)")
+            return (false, "\(errorMessage) (\(errorCode))")
         }
+        
+        // 如果没有错误但也没有结果
+        guard let descriptor = descriptor else {
+            return (true, "")
+        }
+        
+        // 返回结果
+        let output = descriptor.stringValue ?? ""
+        return (true, output)
     }
     
     // 运行终端命令
