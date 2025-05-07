@@ -411,89 +411,37 @@ struct ContentView: View {
     func executeActionWhenCountdownEnds(actionType: ActionType) {
         switch actionType {
         case .shutdown:
-            // 使用NSTask执行关机命令，避免权限问题
-            // 在后台线程执行命令，然后在主线程更新UI
-            DispatchQueue.global(qos: .default).async {
-                let process = Process()
-                process.launchPath = "/usr/bin/osascript"
-                process.arguments = ["-e", "tell application \"Finder\" to shut down"]
-                
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-                
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-                    
-                    self.logger.info("执行关机命令结果: \(output)")
-                    
-                    // 在主线程更新UI
-                    DispatchQueue.main.async {
-                        self.appendToCommandOutput("执行关机命令")
-                        if output.isEmpty {
-                            self.appendToCommandOutput("结果: 成功")
-                        } else {
-                            self.appendToCommandOutput("结果: \(output)")
-                            self.feedback = "关机命令执行失败: \(output)"
-                        }
-                    }
-                } catch {
-                    self.logger.error("执行关机命令异常: \(error)")
-                    
-                    // 在主线程更新UI
-                    DispatchQueue.main.async {
-                        self.appendToCommandOutput("执行关机命令")
-                        self.appendToCommandOutput("错误: \(error)")
-                        self.feedback = "关机命令执行失败: \(error)"
-                    }
-                }
+            // 使用AppleScript直接执行关机命令，避免优先级反转
+            let script = "tell application \"Finder\" to shut down"
+            
+            // 在主线程上执行AppleScript
+            let result = runAppleScript(script: script)
+            
+            self.logger.info("执行关机命令结果: \(result.output)")
+            self.appendToCommandOutput("执行关机命令")
+            
+            if result.success {
+                self.appendToCommandOutput("结果: 成功")
+            } else {
+                self.appendToCommandOutput("结果: \(result.output)")
+                self.feedback = "关机命令执行失败: \(result.output)"
             }
             
         case .sleep:
-            // 使用NSTask执行休眠命令，避免权限问题
-            // 在后台线程执行命令，然后在主线程更新UI
-            DispatchQueue.global(qos: .default).async {
-                let process = Process()
-                process.launchPath = "/usr/bin/osascript"
-                process.arguments = ["-e", "tell application \"Finder\" to sleep"]
-                
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-                
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-                    
-                    self.logger.info("执行休眠命令结果: \(output)")
-                    
-                    // 在主线程更新UI
-                    DispatchQueue.main.async {
-                        self.appendToCommandOutput("执行休眠命令")
-                        if output.isEmpty {
-                            self.appendToCommandOutput("结果: 成功")
-                        } else {
-                            self.appendToCommandOutput("结果: \(output)")
-                            self.feedback = "休眠命令执行失败: \(output)"
-                        }
-                    }
-                } catch {
-                    self.logger.error("执行休眠命令异常: \(error)")
-                    
-                    // 在主线程更新UI
-                    DispatchQueue.main.async {
-                        self.appendToCommandOutput("执行休眠命令")
-                        self.appendToCommandOutput("错误: \(error)")
-                        self.feedback = "休眠命令执行失败: \(error)"
-                    }
-                }
+            // 使用AppleScript直接执行休眠命令，避免优先级反转
+            let script = "tell application \"Finder\" to sleep"
+            
+            // 在主线程上执行AppleScript
+            let result = runAppleScript(script: script)
+            
+            self.logger.info("执行休眠命令结果: \(result.output)")
+            self.appendToCommandOutput("执行休眠命令")
+            
+            if result.success {
+                self.appendToCommandOutput("结果: 成功")
+            } else {
+                self.appendToCommandOutput("结果: \(result.output)")
+                self.feedback = "休眠命令执行失败: \(result.output)"
             }
         }
     }
@@ -522,32 +470,29 @@ struct ContentView: View {
 
     // 运行AppleScript并返回结果
     func runAppleScript(script: String) -> (success: Bool, output: String) {
-        var error: NSDictionary?
-        var output = ""
+        // 使用Process而不是NSAppleScript来执行AppleScript，完全避免优先级反转
+        let process = Process()
+        process.launchPath = "/usr/bin/osascript"
+        process.arguments = ["-e", script]
         
-        // 创建一个信号量来同步操作
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: (success: Bool, output: String) = (false, "未知错误")
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
         
-        // 在默认QoS线程上执行AppleScript，避免优先级反转
-        DispatchQueue.global(qos: .default).async {
-            if let scriptObject = NSAppleScript(source: script) {
-                let scriptResult = scriptObject.executeAndReturnError(&error)
-                if let stringValue = scriptResult.stringValue {
-                    output = stringValue
-                    result = (true, stringValue)
-                } else if let error = error {
-                    let errorInfo = "错误: \(error)"
-                    self.logger.error("\(errorInfo)")
-                    result = (false, errorInfo)
-                }
-            }
-            semaphore.signal()
+        do {
+            try process.run()
+            
+            // 使用数据而不是等待进程完成
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+            
+            // 注意：我们不使用waitUntilExit()，因为这可能导致优先级反转
+            return (true, output)
+        } catch {
+            let errorInfo = "错误: \(error)"
+            self.logger.error("\(errorInfo)")
+            return (false, errorInfo)
         }
-        
-        // 等待执行完成
-        _ = semaphore.wait(timeout: .now() + 10) // 设置10秒超时
-        return result
     }
     
     // 运行终端命令
