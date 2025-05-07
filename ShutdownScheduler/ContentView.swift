@@ -1,59 +1,519 @@
-//
-//  ContentView.swift
-//  ShutdownScheduler
-//
-//  Created by Hu Gang on 2025/5/7.
-//
-
 import SwiftUI
-import SwiftData
+import OSLog
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    // 添加日志记录器
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "ContentView")
+    
+    @State private var minutes: String = "30"
+    @State private var feedback: String = ""
+    @State private var selectedAction: ActionType = .shutdown
+    @State private var isCountingDown: Bool = false
+    @State private var remainingSeconds: Int = 0
+    @State private var countdownTimer: Timer? = nil
+    @State private var endTime: Date? = nil
+    @State private var commandOutput: String = ""
+    @State private var scheduledJobLabels: [String] = []
+    @State private var scheduledJobPaths: [String] = []
+    
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+        VStack(spacing: 15) {
+            Text("定时关机/休眠工具").font(.headline)
+            
+            if isCountingDown {
+                // 显示倒计时
+                VStack(spacing: 10) {
+                    Text("倒计时中: \(formatTimeRemaining(seconds: remainingSeconds))")
+                        .font(.title)
+                        .foregroundColor(.blue)
+                    
+                    Text("预计\(selectedAction.rawValue)时间: \(formatDate(endTime))")
+                        .font(.subheadline)
+                    
+                    Button("取消任务") {
+                        cancelAction()
+                    }
+                    .foregroundColor(.red)
+                    .padding(.vertical, 5)
+                }
+            } else {
+                // 设置界面
+                HStack {
+                    Text("延时分钟：")
+                    TextField("30", text: $minutes)
+                        .frame(width: 50)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                }
+                
+                Picker("操作类型", selection: $selectedAction) {
+                    Text(ActionType.shutdown.rawValue).tag(ActionType.shutdown)
+                    Text(ActionType.sleep.rawValue).tag(ActionType.sleep)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.vertical, 5)
+
+                Button("开始倒计时") {
+                    executeAction(minutes: minutes, actionType: selectedAction)
+                }
+                .padding(.top, 5)
+            }
+            
+            Text(feedback)
+                .foregroundColor(.gray)
+                .font(.caption)
+                
+            // 添加日志显示区域
+            if !commandOutput.isEmpty {
+                ScrollView {
+                    Text("命令日志:")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 5)
+                    
+                    Text(commandOutput)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(5)
+                        .background(Color.black.opacity(0.05))
+                        .cornerRadius(5)
+                }
+                .frame(maxHeight: 150)
+            }
+        }
+        .padding()
+        .onDisappear {
+            stopCountdown()
+        }
+    }
+
+    @State private var showingAuthAlert = false
+    @State private var pendingAction: (()->Void)? = nil
+    
+    func executeAction(minutes: String, actionType: ActionType) {
+        guard let minutesInt = Int(minutes), minutesInt > 0 else {
+            feedback = "请输入有效的分钟数"
+            return
+        }
+        
+        let actionName: String
+        let secondsDelay = minutesInt * 60
+        
+        // 清空之前的命令输出
+        commandOutput = ""
+        
+        // 计算目标时间
+        let targetTime = Date().addingTimeInterval(TimeInterval(secondsDelay))
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: targetTime)
+        let minute = calendar.component(.minute, from: targetTime)
+        
+        // 显示提示，告知用户需要输入管理员密码
+        feedback = "即将设置\(minutes)分钟后\(actionType.rawValue)，需要您输入管理员密码"
+        
+        // 先启动倒计时显示，让用户可以看到剩余时间
+        startCountdown(seconds: secondsDelay, actionType: actionType)
+        
+        switch actionType {
+        case .shutdown:
+            actionName = "关机"
+            
+            // 使用at命令计划关机
+            let result = scheduleOneTimeShutdown(atHour: hour, minute: minute)
+            if result.success {
+                feedback = "已设置 \(minutes) 分钟后\(actionName)"
+            } else {
+                feedback = "设置\(actionName)失败，可能需要管理员权限"
+                appendToCommandOutput("错误: \(result.output)")
+                stopCountdown()
+            }
+            
+        case .sleep:
+            actionName = "休眠"
+            
+            // 使用at命令计划休眠
+            let result = scheduleOneTimeSleep(atHour: hour, minute: minute)
+            if result.success {
+                feedback = "已设置 \(minutes) 分钟后\(actionName)"
+            } else {
+                feedback = "设置\(actionName)失败，可能需要管理员权限"
+                appendToCommandOutput("错误: \(result.output)")
+                stopCountdown()
+            }
+        }
+    }
+    
+    // 请求管理员权限并执行命令
+    func requestAdminPrivilegesAndExecute(command: String, actionName: String, secondsDelay: Int) {
+        // 执行命令
+        logger.info("执行命令: \(command)")
+        let script = """
+        do shell script "\(command)" with administrator privileges
+        """
+        
+        let result = runAppleScript(script: script)
+        logger.info("命令执行结果: \(result.output)")
+        
+        // 更新命令输出
+        appendToCommandOutput("执行命令: \(command)")
+        appendToCommandOutput("结果: \(result.output)")
+        
+        if result.success {
+            feedback = "已设置 \(secondsDelay / 60) 分钟后\(actionName)"
+            // 开始倒计时
+            startCountdown(seconds: secondsDelay, actionType: .shutdown)
+        } else {
+            feedback = "命令执行失败: \(result.output)"
+        }
+    }
+
+    func cancelAction() {
+        // 取消所有计划任务
+        cancelAllScheduledJobs()
+        
+        feedback = "已取消所有计划任务"
+        
+        // 停止倒计时
+        stopCountdown()
+    }
+    
+    // 计划一次性休眠任务
+    func scheduleOneTimeSleep(atHour hour: Int, minute: Int) -> (success: Bool, output: String) {
+        let timeString = String(format: "%02d:%02d", hour, minute)
+        
+        // 创建一个唯一的标识符
+        let jobLabel = "com.app.shutdownscheduler.sleep."+UUID().uuidString
+        
+        // 创建临时plist文件路径
+        let tempDir = FileManager.default.temporaryDirectory
+        let plistPath = tempDir.appendingPathComponent("\(jobLabel).plist")
+        
+        // 获取当前日期并设置目标时间
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        dateComponents.second = 0
+        
+        guard let targetDate = calendar.date(from: dateComponents) else {
+            return (false, "无法创建目标日期")
+        }
+        
+        // 如果目标时间已经过去，则设置为明天的同一时间
+        var finalDate = targetDate
+        if finalDate < Date() {
+            finalDate = calendar.date(byAdding: .day, value: 1, to: targetDate) ?? targetDate
+        }
+        
+        // 创建plist内容
+        let plistContent = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>\(jobLabel)</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>/usr/bin/pmset</string>
+                <string>sleepnow</string>
+            </array>
+            <key>StartCalendarInterval</key>
+            <dict>
+                <key>Hour</key>
+                <integer>\(calendar.component(.hour, from: finalDate))</integer>
+                <key>Minute</key>
+                <integer>\(calendar.component(.minute, from: finalDate))</integer>
+            </dict>
+        </dict>
+        </plist>
+        """
+        
+        // 写入plist文件
+        do {
+            try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
+        } catch {
+            return (false, "无法创建plist文件: \(error.localizedDescription)")
+        }
+        
+        // 使用launchctl加载plist
+        let script = """
+        do shell script "launchctl load \(plistPath.path)" with administrator privileges
+        """
+        
+        let result = runAppleScript(script: script)
+        
+        if result.success {
+            // 保存任务标识符以便后续取消
+            scheduledJobLabels.append(jobLabel)
+            scheduledJobPaths.append(plistPath.path)
+        }
+        
+        appendToCommandOutput("计划休眠任务: \(timeString)")
+        appendToCommandOutput("结果: \(result.output.isEmpty ? "成功" : result.output)")
+        
+        return result
+    }
+    
+    // 计划一次性关机任务
+    func scheduleOneTimeShutdown(atHour hour: Int, minute: Int) -> (success: Bool, output: String) {
+        let timeString = String(format: "%02d:%02d", hour, minute)
+        
+        // 创建一个唯一的标识符
+        let jobLabel = "com.app.shutdownscheduler.shutdown."+UUID().uuidString
+        
+        // 创建临时plist文件路径
+        let tempDir = FileManager.default.temporaryDirectory
+        let plistPath = tempDir.appendingPathComponent("\(jobLabel).plist")
+        
+        // 获取当前日期并设置目标时间
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        dateComponents.second = 0
+        
+        guard let targetDate = calendar.date(from: dateComponents) else {
+            return (false, "无法创建目标日期")
+        }
+        
+        // 如果目标时间已经过去，则设置为明天的同一时间
+        var finalDate = targetDate
+        if finalDate < Date() {
+            finalDate = calendar.date(byAdding: .day, value: 1, to: targetDate) ?? targetDate
+        }
+        
+        // 创建plist内容
+        let plistContent = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>\(jobLabel)</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>/sbin/shutdown</string>
+                <string>-h</string>
+                <string>now</string>
+            </array>
+            <key>StartCalendarInterval</key>
+            <dict>
+                <key>Hour</key>
+                <integer>\(calendar.component(.hour, from: finalDate))</integer>
+                <key>Minute</key>
+                <integer>\(calendar.component(.minute, from: finalDate))</integer>
+            </dict>
+        </dict>
+        </plist>
+        """
+        
+        // 写入plist文件
+        do {
+            try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
+        } catch {
+            return (false, "无法创建plist文件: \(error.localizedDescription)")
+        }
+        
+        // 使用launchctl加载plist
+        let script = """
+        do shell script "launchctl load \(plistPath.path)" with administrator privileges
+        """
+        
+        let result = runAppleScript(script: script)
+        
+        if result.success {
+            // 保存任务标识符以便后续取消
+            scheduledJobLabels.append(jobLabel)
+            scheduledJobPaths.append(plistPath.path)
+        }
+        
+        appendToCommandOutput("计划关机任务: \(timeString)")
+        appendToCommandOutput("结果: \(result.output.isEmpty ? "成功" : result.output)")
+        
+        return result
+    }
+    
+    // 取消所有计划任务
+    func cancelAllScheduledJobs() {
+        var allSuccess = true
+        var output = ""
+        
+        // 如果没有计划任务，直接返回
+        if scheduledJobLabels.isEmpty {
+            appendToCommandOutput("没有计划任务需要取消")
+            return
+        }
+        
+        // 遍历所有计划任务
+        for (index, jobLabel) in scheduledJobLabels.enumerated() {
+            let plistPath = scheduledJobPaths[index]
+            
+            // 卸载任务
+            let script = """
+            do shell script "launchctl unload \(plistPath)" with administrator privileges
+            """
+            
+            let result = runAppleScript(script: script)
+            
+            if !result.success {
+                allSuccess = false
+                output += "\n\(jobLabel): \(result.output)"
+            }
+            
+            // 尝试删除plist文件
+            do {
+                try FileManager.default.removeItem(atPath: plistPath)
+            } catch {
+                output += "\n无法删除文件 \(plistPath): \(error.localizedDescription)"
+            }
+        }
+        
+        // 清空任务列表
+        scheduledJobLabels.removeAll()
+        scheduledJobPaths.removeAll()
+        
+        appendToCommandOutput("取消所有计划任务")
+        appendToCommandOutput("结果: " + (output.isEmpty ? "成功" : output))
+    }
+    
+    // 开始倒计时
+    func startCountdown(seconds: Int, actionType: ActionType) {
+        // 停止之前的倒计时（如果有）
+        stopCountdown()
+        
+        // 设置倒计时的结束时间
+        endTime = Date().addingTimeInterval(TimeInterval(seconds))
+        remainingSeconds = seconds
+        isCountingDown = true
+        
+        // 创建定时器，每秒更新一次
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            
+            if self.remainingSeconds > 0 {
+                self.remainingSeconds -= 1
+            } else {
+                // 倒计时结束，执行相应操作
+                self.executeActionWhenCountdownEnds(actionType: actionType)
+                self.stopCountdown()
+            }
+        }
+    }
+    
+    // 停止倒计时
+    func stopCountdown() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        isCountingDown = false
+    }
+    
+    // 倒计时结束时执行相应操作
+    func executeActionWhenCountdownEnds(actionType: ActionType) {
+        switch actionType {
+        case .shutdown:
+            // 直接使用shell命令执行关机，需要管理员权限
+            let shutdownCommand = """
+            do shell script "/sbin/shutdown -h now" with administrator privileges
+            """
+            
+            // 在后台线程执行命令，然后在主线程更新UI
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = self.runAppleScript(script: shutdownCommand)
+                self.logger.info("执行关机命令结果: \(result.output)")
+                
+                // 在主线程更新UI
+                DispatchQueue.main.async {
+                    self.appendToCommandOutput("执行关机命令")
+                    self.appendToCommandOutput("结果: \(result.output)")
+                    
+                    if !result.success {
+                        self.feedback = "关机命令执行失败: \(result.output)"
                     }
                 }
-                .onDelete(perform: deleteItems)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+            
+        case .sleep:
+            // 直接使用shell命令执行休眠，需要管理员权限
+            let sleepCommand = """
+            do shell script "pmset sleepnow" with administrator privileges
+            """
+            
+            // 在后台线程执行命令，然后在主线程更新UI
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = self.runAppleScript(script: sleepCommand)
+                self.logger.info("执行休眠命令结果: \(result.output)")
+                
+                // 在主线程更新UI
+                DispatchQueue.main.async {
+                    self.appendToCommandOutput("执行休眠命令")
+                    self.appendToCommandOutput("结果: \(result.output)")
+                    
+                    if !result.success {
+                        self.feedback = "休眠命令执行失败: \(result.output)"
                     }
                 }
             }
-        } detail: {
-            Text("Select an item")
         }
     }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    
+    // 格式化倒计时时间
+    func formatTimeRemaining(seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let seconds = seconds % 60
+        
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
         }
     }
+    
+    // 格式化日期
+    func formatDate(_ date: Date?) -> String {
+        guard let date = date else { return "--" }
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
+    }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    // 运行AppleScript并返回结果
+    func runAppleScript(script: String) -> (success: Bool, output: String) {
+        var error: NSDictionary?
+        var output = ""
+        
+        if let scriptObject = NSAppleScript(source: script) {
+            let result = scriptObject.executeAndReturnError(&error)
+            if let stringValue = result.stringValue {
+                output = stringValue
+                return (true, stringValue)
+            } else if let error = error {
+                let errorInfo = "错误: \(error)"
+                logger.error("\(errorInfo)")
+                return (false, errorInfo)
             }
         }
+        
+        return (false, "未知错误")
     }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+    
+    // 运行终端命令
+    func runTerminalCommand(_ command: String, log: String) {
+        logger.info("\(log): \(command)")
+        
+        let script = """
+        do shell script "\(command)"
+        """
+        
+        let result = runAppleScript(script: script)
+        appendToCommandOutput("\(log): \(command)")
+        appendToCommandOutput("结果: \(result.output)")
+    }
+    
+    // 添加命令输出到日志区域
+    func appendToCommandOutput(_ text: String) {
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        commandOutput += "[\(timestamp)] \(text)\n"
+    }
 }

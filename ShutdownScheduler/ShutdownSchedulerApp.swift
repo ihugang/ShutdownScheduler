@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct ShutdownSchedulerApp: App {
+   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+   
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
