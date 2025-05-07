@@ -26,9 +26,15 @@ struct ShutdownSchedulerApp: App {
     }()
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        // 使用空的WindowGroup，这样应用程序启动时不会显示主窗口
+        WindowGroup(id: "hidden") {
+            EmptyView()
         }
         .modelContainer(sharedModelContainer)
+        // 添加设置项，允许用户通过菜单访问设置
+        Settings {
+            Text("定时关机/休眠工具设置")
+                .font(.headline)
+        }
     }
 }

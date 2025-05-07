@@ -2,10 +2,16 @@ import SwiftUI
 import OSLog
 
 struct ContentView: View {
+    // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
+    var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
+    
+    init(countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil) {
+        self.countdownStateChanged = countdownStateChanged
+    }
     // 添加日志记录器
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "ContentView")
     
-    @State private var minutes: String = "30"
+    @State private var minutes: Int = 30
     @State private var feedback: String = ""
     @State private var selectedAction: ActionType = .shutdown
     @State private var isCountingDown: Bool = false
@@ -17,68 +23,138 @@ struct ContentView: View {
     @State private var scheduledJobPaths: [String] = []
     
     var body: some View {
-        VStack(spacing: 15) {
-            Text("定时关机/休眠工具").font(.headline)
+        VStack(spacing: 20) {
+            Text("定时关机/休眠工具")
+                .font(.headline)
+                .padding(.bottom, 5)
             
             if isCountingDown {
                 // 显示倒计时
-                VStack(spacing: 10) {
+                VStack(spacing: 15) {
                     Text("倒计时中: \(formatTimeRemaining(seconds: remainingSeconds))")
                         .font(.title)
                         .foregroundColor(.blue)
+                        .frame(maxWidth: .infinity, alignment: .center)
                     
                     Text("预计\(selectedAction.rawValue)时间: \(formatDate(endTime))")
                         .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .center)
                     
                     Button("取消任务") {
                         cancelAction()
                     }
-                    .foregroundColor(.red)
-                    .padding(.vertical, 5)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .background(Color.red)
+                    .cornerRadius(8)
+                    .padding(.top, 10)
                 }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
             } else {
                 // 设置界面
-                HStack {
-                    Text("延时分钟：")
-                    TextField("30", text: $minutes)
-                        .frame(width: 50)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-
+                VStack(spacing: 15) {
+                    // 输入区域 - Spin模式
+                    HStack {
+                        Text("延时分钟：")
+                            .frame(width: 80, alignment: .leading)
+                        
+                        // 减少按钮
+                        Button(action: {
+                            if minutes > 1 {
+                                minutes -= 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle")
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        
+                        // 显示当前分钟数
+                        Text("\(minutes)")
+                            .frame(width: 40)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                        
+                        // 增加按钮
+                        Button(action: {
+                            minutes += 1
+                        }) {
+                            Image(systemName: "plus.circle")
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        
+                        Spacer()
+                    }
+                    .frame(maxWidth: 250)
+                    
+                    // 操作类型选择器
+                    HStack {
+                        Text("操作类型：")
+                            .frame(width: 80, alignment: .leading)
+                        
+                        Picker("", selection: $selectedAction) {
+                            Text(ActionType.shutdown.rawValue).tag(ActionType.shutdown)
+                            Text(ActionType.sleep.rawValue).tag(ActionType.sleep)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .frame(width: 150)
+                        
+                        Spacer()
+                    }
+                    .frame(maxWidth: 250)
+                    
+                    // 按钮
+                    Button("开始倒计时") {
+                        executeAction(minutes: minutes, actionType: selectedAction)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                    .padding(.top, 5)
                 }
-                
-                Picker("操作类型", selection: $selectedAction) {
-                    Text(ActionType.shutdown.rawValue).tag(ActionType.shutdown)
-                    Text(ActionType.sleep.rawValue).tag(ActionType.sleep)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding(.vertical, 5)
-
-                Button("开始倒计时") {
-                    executeAction(minutes: minutes, actionType: selectedAction)
-                }
-                .padding(.top, 5)
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
             }
             
+            // 反馈信息
             Text(feedback)
                 .foregroundColor(.gray)
                 .font(.caption)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 5)
                 
             // 添加日志显示区域
             if !commandOutput.isEmpty {
-                ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("命令日志:")
-                        .font(.caption)
+                        .font(.caption.bold())
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 5)
                     
-                    Text(commandOutput)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(5)
-                        .background(Color.black.opacity(0.05))
-                        .cornerRadius(5)
+                    ScrollView {
+                        Text(commandOutput)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color.black.opacity(0.05))
+                            .cornerRadius(8)
+                    }
                 }
                 .frame(maxHeight: 150)
+                .padding(.top, 5)
+                .padding(.horizontal, 5)
             }
         }
         .padding()
@@ -90,14 +166,14 @@ struct ContentView: View {
     @State private var showingAuthAlert = false
     @State private var pendingAction: (()->Void)? = nil
     
-    func executeAction(minutes: String, actionType: ActionType) {
-        guard let minutesInt = Int(minutes), minutesInt > 0 else {
+    func executeAction(minutes: Int, actionType: ActionType) {
+        guard minutes > 0 else {
             feedback = "请输入有效的分钟数"
             return
         }
         
         let actionName: String
-        let secondsDelay = minutesInt * 60
+        let secondsDelay = minutes * 60
         
         // 清空之前的命令输出
         commandOutput = ""
@@ -175,6 +251,9 @@ struct ContentView: View {
         
         // 停止倒计时
         stopCountdown()
+        
+        // 通知状态变化
+        countdownStateChanged?(false, 0, selectedAction)
     }
     
     // 计划一次性休眠任务
@@ -382,20 +461,28 @@ struct ContentView: View {
         // 停止之前的倒计时（如果有）
         stopCountdown()
         
-        // 设置倒计时的结束时间
-        endTime = Date().addingTimeInterval(TimeInterval(seconds))
         remainingSeconds = seconds
         isCountingDown = true
+        
+        // 计算结束时间
+        endTime = Date().addingTimeInterval(TimeInterval(seconds))
+        
+        // 通知状态变化
+        print("[调试] ContentView: 开始倒计时，触发回调函数")
+        countdownStateChanged?(true, remainingSeconds, selectedAction)
         
         // 创建定时器，每秒更新一次
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
             
-            if self.remainingSeconds > 0 {
-                self.remainingSeconds -= 1
+            if remainingSeconds > 0 {
+                remainingSeconds -= 1
+                // 通知状态变化
+                print("[调试] ContentView: 倒计时更新，剩余时间: \(remainingSeconds)")
+                countdownStateChanged?(true, remainingSeconds, selectedAction)
             } else {
                 // 倒计时结束，执行相应操作
-                self.executeActionWhenCountdownEnds(actionType: actionType)
-                self.stopCountdown()
+                executeActionWhenCountdownEnds(actionType: actionType)
+                stopCountdown()
             }
         }
     }
@@ -405,6 +492,10 @@ struct ContentView: View {
         countdownTimer?.invalidate()
         countdownTimer = nil
         isCountingDown = false
+        
+        // 通知状态变化
+        print("[调试] ContentView: 停止倒计时，触发回调函数")
+        countdownStateChanged?(false, 0, selectedAction)
     }
     
     // 倒计时结束时执行相应操作
