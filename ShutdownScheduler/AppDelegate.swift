@@ -72,6 +72,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 隐藏dock图标
         NSApp.setActivationPolicy(.accessory)
         
+        // 关闭所有窗口
+        NSApp.windows.forEach { $0.close() }
+        
+        // 确保不过度激活应用
+        NSApp.deactivate()
+        
         // 创建 ContentView 并传入回调函数
         let contentView = ContentView(countdownStateChanged: { [weak self] isCountingDown, remainingSeconds, actionType in
             guard let self = self else { return }
