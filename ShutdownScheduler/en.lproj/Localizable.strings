@@ -27,3 +27,5 @@
 "cancel_task" = "Cancel Task";
 "countdown" = "Countdown: %@";
 "estimated_time" = "Estimated %@ time: %@";
+"visit_github" = "Visit Github";
+"close_button" = "Close";

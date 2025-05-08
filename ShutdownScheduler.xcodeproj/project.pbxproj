@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		14EA50F62DCC7AA60096E5C2 /* build_shutdown_scheduler.sh in Resources */ = {isa = PBXBuildFile; fileRef = 14EA50F42DCC7AA20096E5C2 /* build_shutdown_scheduler.sh */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		14DAF8622DCB33D60066AE2E /* ShutdownScheduler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShutdownScheduler.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		14EA50F42DCC7AA20096E5C2 /* build_shutdown_scheduler.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = build_shutdown_scheduler.sh; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +39,7 @@
 			children = (
 				14DAF8642DCB33D60066AE2E /* ShutdownScheduler */,
 				14DAF8632DCB33D60066AE2E /* Products */,
+				14EA50F42DCC7AA20096E5C2 /* build_shutdown_scheduler.sh */,
 			);
 			sourceTree = "<group>";
 		};
@@ -110,6 +116,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				14EA50F62DCC7AA60096E5C2 /* build_shutdown_scheduler.sh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -13,6 +13,7 @@
                 <outlet property="launchAtLoginCheckbox" destination="A03" id="B03"/>
                 <outlet property="launchAtLoginLabel" destination="A04" id="B04"/>
                 <outlet property="settingsTitleLabel" destination="A05" id="B05"/>
+                <outlet property="closeButton" destination="A06" id="B06"/>
                 <outlet property="window" destination="F0z-JX-Cv5" id="gIp-Ho-8D9"/>
             </connections>
         </customObject>

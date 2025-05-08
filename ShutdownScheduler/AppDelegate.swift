@@ -474,10 +474,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 创建并显示关于对话框
         let alert = NSAlert()
         alert.messageText = getLocalizedString(for: "app_title", defaultValue: "定时关机/休眠工具")
-        alert.informativeText = "版本: 1.0\n© 2025 Hu Gang"
+        
+        // 从应用程序的Bundle中获取真实版本号
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+        
+        alert.informativeText = "Version: \(version) (\(build))\n© 2025 Hu Gang\n\nhttps://github.com/ihugang/ShutdownScheduler"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        
+        // 添加访问GitHub按钮
+        let githubButton = alert.addButton(withTitle: getLocalizedString(for: "visit_github", defaultValue: "访问GitHub"))
+        
+        // 显示对话框并获取用户点击的按钮
+        let response = alert.runModal()
+        
+        // 如果用户点击了访问GitHub按钮
+        if response == .alertSecondButtonReturn {
+            // 打开GitHub链接
+            if let url = URL(string: "https://github.com/ihugang/ShutdownScheduler") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
     
     // 获取本地化字符串

@@ -1,0 +1,50 @@
+# Xcode
+#
+# gitignore 模板适用于Swift/macOS项目
+#
+# 构建产物
+build/
+DerivedData/
+*.dmg
+
+# Xcode 自动生成的文件
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+*.xcuserstate
+xcuserdata/
+*.xcworkspace
+
+# Swift 包管理器
+.build/
+.swiftpm/
+
+# macOS 系统文件
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# 缩略图
+._*
+
+# 可能出现在卷根目录中的文件
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# 可能在远程AFP共享上创建的目录
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# 其他常见的忽略文件
+*.log
+*.swp
+*.swo

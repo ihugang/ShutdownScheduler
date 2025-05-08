@@ -13,6 +13,9 @@ class SettingsWindowController: NSWindowController {
     @IBOutlet weak var launchAtLoginLabel: NSTextField!
     @IBOutlet weak var settingsTitleLabel: NSTextField!
     
+    // 关闭按钮
+    @IBOutlet weak var closeButton: NSButton!
+    
     override var windowNibName: NSNib.Name? {
         return "SettingsWindow"
     }
@@ -83,6 +86,11 @@ class SettingsWindowController: NSWindowController {
         settingsTitleLabel.stringValue = getLocalizedString(for: "app_settings", defaultValue: "应用程序设置")
         languageLabel.stringValue = getLocalizedString(for: "interface_language", defaultValue: "界面语言：")
         launchAtLoginLabel.stringValue = getLocalizedString(for: "launch_at_login", defaultValue: "开机自动启动：")
+        
+        // 更新关闭按钮文本
+        if let closeButton = closeButton {
+            closeButton.title = getLocalizedString(for: "close_button", defaultValue: "关闭")
+        }
     }
     
     private func getLocalizedString(for key: String, defaultValue: String) -> String {

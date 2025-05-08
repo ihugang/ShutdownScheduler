@@ -11,6 +11,10 @@
 
 **ShutdownScheduler** is a lightweight macOS menu bar app that allows you to schedule automatic shutdown or sleep after a set countdown.
 
+### 🧲 Download
+
+[⬇️ Download Latest Release](https://github.com/ihugang/ShutdownScheduler/releases/latest)
+
 ### 🔧 Features
 - ⏱ Set a countdown in minutes
 - 💻 Shutdown or sleep your Mac automatically
@@ -30,6 +34,10 @@
 ## 🇨🇳 中文说明
 
 **ShutdownScheduler** 是一款轻量级的 macOS 菜单栏工具，支持在设定倒计时后自动关机或休眠。
+
+### 🧲 下载
+
+[⬇️ 点击下载最新版](https://github.com/ihugang/ShutdownScheduler/releases/latest)
 
 ### 🔧 功能特点
 - ⏱ 设置分钟倒计时
