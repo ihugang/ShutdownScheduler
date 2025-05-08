@@ -2,7 +2,11 @@ import SwiftUI
 import OSLog
 import Combine
 
-struct ContentView: View {
+struct ContentView: View {    
+    // 本地化字符串辅助函数
+    private func localizedString(for key: String, defaultValue: String) -> String {
+        return SettingsManager.shared.localizedString(for: key, defaultValue: defaultValue)
+    }
     // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
     var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
     
@@ -28,23 +32,23 @@ struct ContentView: View {
     
     var body: some View {
        VStack(spacing: 20) {
-         Text("定时关机/休眠工具")
-            .font(.headline)
-            .padding(.bottom, 5)
+          Text(localizedString(for: "app_title", defaultValue: "定时关机/休眠工具"))
+             .font(.headline)
+             .padding(.bottom, 5)
          
          if isCountingDown {
                // 显示倒计时
             VStack(spacing: 15) {
-               Text("倒计时中: \(formatTimeRemaining(seconds: remainingSeconds))")
+               Text(String(format: localizedString(for: "countdown", defaultValue: "倒计时中: %@"), formatTimeRemaining(seconds: remainingSeconds)))
                   .font(.title)
                   .foregroundColor(.blue)
                   .frame(maxWidth: .infinity, alignment: .center)
                
-               Text("预计\(selectedAction.rawValue)时间: \(formatDate(endTime))")
+               Text(String(format: localizedString(for: "estimated_time", defaultValue: "预计%@时间: %@"), localizedString(for: selectedAction.rawValue, defaultValue: selectedAction.rawValue), formatDate(endTime)))
                   .font(.subheadline)
                   .frame(maxWidth: .infinity, alignment: .center)
                
-               Button("取消任务") {
+               Button(localizedString(for: "cancel_task", defaultValue: "取消任务")) {
                   cancelAction()
                }
                .foregroundColor(.white)
@@ -63,7 +67,7 @@ struct ContentView: View {
             VStack(spacing: 15) {
                   // 输入区域 - Spin模式
                HStack {
-                  Text("延时分钟：")
+                  Text(localizedString(for: "delay_minutes", defaultValue: "延时分钟："))
                      .frame(width: 80, alignment: .leading)
                   
                      // 减少按钮
@@ -104,12 +108,12 @@ struct ContentView: View {
                
                   // 操作类型选择器
                HStack {
-                  Text("操作类型：")
+                  Text(localizedString(for: "action_type", defaultValue: "操作类型："))
                      .frame(width: 80, alignment: .leading)
                   
                   Picker("", selection: $selectedAction) {
-                     Text(ActionType.shutdown.rawValue).tag(ActionType.shutdown)
-                     Text(ActionType.sleep.rawValue).tag(ActionType.sleep)
+                     Text(localizedString(for: "shutdown", defaultValue: "关机")).tag(ActionType.shutdown)
+                     Text(localizedString(for: "sleep", defaultValue: "休眠")).tag(ActionType.sleep)
                   }
                   .pickerStyle(SegmentedPickerStyle())
                   .frame(width: 150)
@@ -119,7 +123,7 @@ struct ContentView: View {
                .frame(maxWidth: 250)
                
                   // 按钮
-               Button("开始倒计时") {
+               Button(localizedString(for: "start_countdown", defaultValue: "开始倒计时")) {
                   executeAction(minutes: minutes, actionType: selectedAction)
                }
                .buttonStyle(PlainButtonStyle())
