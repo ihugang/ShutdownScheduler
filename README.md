@@ -11,9 +11,18 @@
 
 **ShutdownScheduler** is a lightweight macOS menu bar app that allows you to schedule automatic shutdown or sleep after a set countdown.
 
-### 🧲 Download
+### 🧲 Manual Download
 
 [⬇️ Download Latest Release](https://github.com/ihugang/ShutdownScheduler/releases/latest)
+
+### 🍺 Install via Homebrew
+
+You can install ShutdownScheduler using Homebrew:
+
+```bash
+brew tap ihugang/shutdownscheduler
+brew install --cask shutdownscheduler
+```
 
 ### 🔧 Features
 - ⏱ Set a countdown in minutes
@@ -35,9 +44,18 @@
 
 **ShutdownScheduler** 是一款轻量级的 macOS 菜单栏工具，支持在设定倒计时后自动关机或休眠。
 
-### 🧲 下载
+### 🧲 手工下载安装
 
 [⬇️ 点击下载最新版](https://github.com/ihugang/ShutdownScheduler/releases/latest)
+
+### 🍺 Install via Homebrew 安装说明
+
+You can install ShutdownScheduler using Homebrew:
+
+```bash
+brew tap ihugang/shutdownscheduler
+brew install --cask shutdownscheduler
+```
 
 ### 🔧 功能特点
 - ⏱ 设置分钟倒计时
