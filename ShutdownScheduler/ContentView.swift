@@ -1,13 +1,14 @@
 import SwiftUI
 import OSLog
+import Combine
 
 struct ContentView: View {
-      // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
-   var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
-   
-   init(countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil) {
-      self.countdownStateChanged = countdownStateChanged
-   }
+    // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
+    var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
+    
+    init(countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil) {
+        self.countdownStateChanged = countdownStateChanged
+    }
       // 添加日志记录器
    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "ContentView")
    
@@ -21,9 +22,12 @@ struct ContentView: View {
    @State private var commandOutput: String = ""
    @State private var scheduledJobLabels: [String] = []
    @State private var scheduledJobPaths: [String] = []
-   
-   var body: some View {
-      VStack(spacing: 20) {
+      // 创建通知发布者
+    private let shutdownNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectShutdownAction"))
+    private let sleepNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectSleepAction"))
+    
+    var body: some View {
+       VStack(spacing: 20) {
          Text("定时关机/休眠工具")
             .font(.headline)
             .padding(.bottom, 5)
@@ -142,12 +146,11 @@ struct ContentView: View {
             .font(.caption)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 5)
-         
-            // 添加日志显示区域
-         if !commandOutput.isEmpty {
-            VStack(alignment: .leading, spacing: 5) {
-               Text("命令日志:")
-                  .font(.caption.bold())
+                     // 添加日志显示区域
+          if !commandOutput.isEmpty {
+             VStack(alignment: .leading, spacing: 5) {
+                Text("命令日志:")
+                   .font(.caption.bold())
                   .frame(maxWidth: .infinity, alignment: .leading)
                
                ScrollView {
@@ -165,6 +168,18 @@ struct ContentView: View {
          }
       }
       .padding()
+      .onReceive(shutdownNotification) { _ in
+         selectedAction = .shutdown
+         minutes = 30
+         // 可选：自动开始倒计时
+         // executeAction(minutes: minutes, actionType: selectedAction)
+      }
+      .onReceive(sleepNotification) { _ in
+         selectedAction = .sleep
+         minutes = 30
+         // 可选：自动开始倒计时
+         // executeAction(minutes: minutes, actionType: selectedAction)
+      }
       .onDisappear {
          stopCountdown()
       }

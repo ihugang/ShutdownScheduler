@@ -1,0 +1,29 @@
+/* Settings Window */
+"settings" = "Settings";
+"app_settings" = "Application Settings";
+"interface_language" = "Interface Language:";
+"launch_at_login" = "Launch at Login:";
+"close" = "Close";
+
+/* Menu Items */
+"shutdown_menu" = "Schedule Shutdown";
+"sleep_menu" = "Schedule Sleep";
+"cancel_menu" = "Cancel Schedule";
+"settings_menu" = "Settings...";
+"about_menu" = "About";
+"quit_menu" = "Quit";
+
+/* Notifications */
+"cancel_notification_title" = "Schedule Cancelled";
+"cancel_notification_text" = "Shutdown/Sleep schedule has been cancelled";
+
+/* Main Interface */
+"app_title" = "Shutdown/Sleep Timer";
+"delay_minutes" = "Delay Minutes:";
+"action_type" = "Action Type:";
+"shutdown" = "Shutdown";
+"sleep" = "Sleep";
+"start_countdown" = "Start Countdown";
+"cancel_task" = "Cancel Task";
+"countdown" = "Countdown: %@";
+"estimated_time" = "Estimated %@ time: %@";

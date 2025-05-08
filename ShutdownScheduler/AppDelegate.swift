@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import Foundation
+import os.log
 
 // 创建一个自定义的NSView类来显示倒计时和图标
 class StatusItemView: NSView {
@@ -67,6 +68,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var selectedAction = ""
     var menuBarUpdateTimer: Timer?
     
+    // 设置窗口
+    private var settingsWindowController: SettingsWindowController?
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "AppDelegate")
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("[调试] 应用程序启动")
         // 隐藏dock图标
@@ -100,6 +105,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 创建状态栏图标
         createStatusItem()
+        
+        // 显示主界面
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self, let button = self.statusItem?.button else { return }
+            self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
+        }
     }
     
     @objc func handleForceReset() {
@@ -155,23 +166,83 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var icon: NSImage? = nil
         
         // 先尝试加载自定义图标
-        if let customIcon = NSImage(named: "icon_white") {
+        if let bundleIcon = NSImage(named: "StatusBarIcon") {
+            icon = bundleIcon
+        } else if let customIcon = NSImage(named: "icon_white") {
             icon = customIcon
-        } else {
-            // 使用系统图标
-            icon = NSImage(systemSymbolName: "power", accessibilityDescription: "Shutdown")
+        } else if let systemIcon = NSImage(systemSymbolName: "timer", accessibilityDescription: "Timer") {
+            icon = systemIcon
         }
         
+        // 设置图标和大小
         icon?.size = NSSize(width: 18, height: 18)
-        self.originalIcon = icon
-        
-        // 设置状态栏图标
         statusItem?.button?.image = icon
+        originalIcon = icon
         
-        // 设置点击动作
+        // 设置点击动作 - 左键点击显示主界面
         statusItem?.button?.action = #selector(togglePopover(_:))
         
-        print("[调试] 创建状态栏图标: \(icon != nil)")
+        // 添加右键菜单
+        let rightClickMenu = createMenu()
+        statusItem?.menu = rightClickMenu
+        
+        logger.info("创建状态栏图标: \(icon != nil ? "成功" : "失败")")
+    }
+    
+
+    
+    // 创建右键菜单
+    func createMenu() -> NSMenu {
+        let menu = NSMenu()
+        
+        // 添加定时关机选项
+        let shutdownItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "shutdown_menu", defaultValue: "定时关机"), 
+                                     action: #selector(scheduleShutdown(_:)), 
+                                     keyEquivalent: "s")
+        shutdownItem.target = self
+        menu.addItem(shutdownItem)
+        
+        // 添加定时休眠选项
+        let sleepItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "sleep_menu", defaultValue: "定时休眠"), 
+                                  action: #selector(scheduleSleep(_:)), 
+                                  keyEquivalent: "l")
+        sleepItem.target = self
+        menu.addItem(sleepItem)
+        
+        // 添加取消定时选项
+        let cancelItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "cancel_menu", defaultValue: "取消定时"), 
+                                   action: #selector(cancelSchedule(_:)), 
+                                   keyEquivalent: "c")
+        cancelItem.target = self
+        menu.addItem(cancelItem)
+        
+        // 添加分隔线
+        menu.addItem(NSMenuItem.separator())
+        
+        // 添加设置项
+        let settingsItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "settings_menu", defaultValue: "设置..."), 
+                                     action: #selector(openSettings(_:)), 
+                                     keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
+        // 添加分隔线
+        menu.addItem(NSMenuItem.separator())
+        
+        // 添加关于项
+        let aboutItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "about_menu", defaultValue: "关于"), 
+                                  action: #selector(showAbout(_:)), 
+                                  keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        
+        // 添加退出项
+        let quitItem = NSMenuItem(title: SettingsManager.shared.localizedString(for: "quit_menu", defaultValue: "退出"), 
+                                 action: #selector(NSApplication.terminate(_:)), 
+                                 keyEquivalent: "q")
+        menu.addItem(quitItem)
+        
+        return menu
     }
     
     /// 显示正常状态（非倒计时状态）
@@ -203,8 +274,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 设置状态栏图标
         statusItem?.button?.image = icon
         
-        // 设置点击动作
+        // 设置点击动作 - 左键点击显示主界面
         statusItem?.button?.action = #selector(togglePopover(_:))
+        
+        // 添加右键菜单
+        let rightClickMenu = createMenu()
+        statusItem?.menu = rightClickMenu
         
         // 清理引用
         statusItemView = nil
@@ -277,6 +352,89 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+    
+
+    
+
+    
+    // 定时关机菜单项处理
+    @objc func scheduleShutdown(_ sender: AnyObject?) {
+        // 显示主界面，并选择关机选项
+        guard let button = statusItem?.button else { return }
+        
+        // 显示主界面
+        if !popover.isShown {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        
+        // 发送通知以选择关机选项
+        NotificationCenter.default.post(name: Notification.Name("SelectShutdownAction"), object: nil)
+    }
+    
+    // 定时休眠菜单项处理
+    @objc func scheduleSleep(_ sender: AnyObject?) {
+        // 显示主界面，并选择休眠选项
+        guard let button = statusItem?.button else { return }
+        
+        // 显示主界面
+        if !popover.isShown {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        
+        // 发送通知以选择休眠选项
+        NotificationCenter.default.post(name: Notification.Name("SelectSleepAction"), object: nil)
+    }
+    
+    // 取消定时菜单项处理
+    @objc func cancelSchedule(_ sender: AnyObject?) {
+        // 取消当前的定时任务
+        if isCountingDown {
+            isCountingDown = false
+            remainingSeconds = 0
+            
+            // 停止定时器
+            stopMenuBarUpdateTimer()
+            
+            // 恢复正常状态
+            displayNormalStatusItem()
+            
+            // 显示通知
+            let notification = NSUserNotification()
+            notification.title = SettingsManager.shared.localizedString(for: "cancel_notification_title", defaultValue: "定时已取消")
+            notification.informativeText = SettingsManager.shared.localizedString(for: "cancel_notification_text", defaultValue: "定时关机/休眠任务已取消")
+            NSUserNotificationCenter.default.deliver(notification)
+        }
+    }
+    
+    @objc func openSettings(_ sender: AnyObject?) {
+        // 如果设置窗口控制器不存在，创建一个
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController()
+        }
+        
+        // 显示设置窗口并激活
+        settingsWindowController?.showWindow(sender)
+        settingsWindowController?.window?.makeKeyAndOrderFront(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    // 显示关于对话框
+    @objc func showAbout(_ sender: AnyObject?) {
+        // 创建并显示关于对话框
+        let alert = NSAlert()
+        alert.messageText = getLocalizedString(for: "app_title", defaultValue: "定时关机/休眠工具")
+        alert.informativeText = "版本: 1.0\n© 2025 Hu Gang"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+    
+    // 获取本地化字符串
+    func getLocalizedString(for key: String, defaultValue: String) -> String {
+        return SettingsManager.shared.localizedString(for: key, defaultValue: defaultValue)
     }
     
     // 启动菜单栏更新定时器

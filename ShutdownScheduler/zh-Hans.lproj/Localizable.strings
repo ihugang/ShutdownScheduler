@@ -1,0 +1,29 @@
+/* 设置窗口 */
+"settings" = "设置";
+"app_settings" = "应用程序设置";
+"interface_language" = "界面语言：";
+"launch_at_login" = "开机自动启动：";
+"close" = "关闭";
+
+/* 菜单项 */
+"shutdown_menu" = "定时关机";
+"sleep_menu" = "定时休眠";
+"cancel_menu" = "取消定时";
+"settings_menu" = "设置...";
+"about_menu" = "关于";
+"quit_menu" = "退出";
+
+/* 通知 */
+"cancel_notification_title" = "定时已取消";
+"cancel_notification_text" = "定时关机/休眠任务已取消";
+
+/* 主界面 */
+"app_title" = "定时关机/休眠工具";
+"delay_minutes" = "延时分钟：";
+"action_type" = "操作类型：";
+"shutdown" = "关机";
+"sleep" = "休眠";
+"start_countdown" = "开始倒计时";
+"cancel_task" = "取消任务";
+"countdown" = "倒计时中: %@";
+"estimated_time" = "预计%@时间: %@";
