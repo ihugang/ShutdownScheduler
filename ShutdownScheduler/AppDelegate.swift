@@ -103,6 +103,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         
+        // 注册语言变化通知
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleLanguageChanged),
+            name: Notification.Name("LanguageChanged"),
+            object: nil
+        )
+        
         // 创建状态栏图标
         createStatusItem()
         
@@ -127,6 +135,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.displayNormalStatusItem()
+        }
+    }
+    
+    // 处理语言变化通知
+    @objc func handleLanguageChanged() {
+        logger.info("语言设置已更改，正在更新界面")
+        
+        // 重新创建状态栏菜单，使用新的语言设置
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 更新菜单
+            let menu = self.createMenu()
+            self.statusItem?.menu = menu
+            
+            // 发送通知给主界面更新
+            NotificationCenter.default.post(name: Notification.Name("RefreshContentView"), object: nil)
         }
     }
     

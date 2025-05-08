@@ -3,6 +3,9 @@ import OSLog
 import Combine
 
 struct ContentView: View {    
+    // 添加刷新视图的状态变量
+    @State private var refreshID = UUID()
+    
     // 本地化字符串辅助函数
     private func localizedString(for key: String, defaultValue: String) -> String {
         return SettingsManager.shared.localizedString(for: key, defaultValue: defaultValue)
@@ -29,6 +32,7 @@ struct ContentView: View {
       // 创建通知发布者
     private let shutdownNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectShutdownAction"))
     private let sleepNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectSleepAction"))
+    private let refreshViewNotification = NotificationCenter.default.publisher(for: Notification.Name("RefreshContentView"))
     
     var body: some View {
        VStack(spacing: 20) {
@@ -184,9 +188,17 @@ struct ContentView: View {
          // 可选：自动开始倒计时
          // executeAction(minutes: minutes, actionType: selectedAction)
       }
+      // 监听刷新界面通知，当语言变化时刷新界面
+      .onReceive(refreshViewNotification) { _ in
+         // 强制刷新界面
+         // 更新 refreshID 状态变量来触发界面刷新
+         refreshID = UUID()
+      }
       .onDisappear {
          stopCountdown()
       }
+      // 使用 refreshID 作为整个视图的 ID，确保语言变化时视图会完全重新创建
+      .id(refreshID)
    }
    
    @State private var showingAuthAlert = false
