@@ -3,6 +3,7 @@
 ![platform](https://img.shields.io/badge/platform-macOS-blue)
 ![language](https://img.shields.io/badge/language-Swift-orange)
 ![version](https://img.shields.io/badge/version-1.0-green)
+![license](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
@@ -46,4 +47,10 @@
 
 ---
 
+## 📄 License
+
+This project is licensed under the **MIT License**.  
+See the [LICENSE](LICENSE) file for details.
+
+---
 🎯 Built with SwiftUI | 🍎 macOS only
