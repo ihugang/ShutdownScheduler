@@ -179,6 +179,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 self.displayNormalStatusItem() // 显示正常状态
             }
+            
+            // 更新菜单项状态
+            let menu = self.createMenu()
+            self.statusItem?.menu = menu
         }
     }
     
@@ -239,6 +243,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                    action: #selector(cancelSchedule(_:)), 
                                    keyEquivalent: "c")
         cancelItem.target = self
+        cancelItem.isEnabled = isCountingDown
         menu.addItem(cancelItem)
         
         // 添加分隔线
@@ -417,6 +422,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func cancelSchedule(_ sender: AnyObject?) {
         // 取消当前的定时任务
         if isCountingDown {
+            logger.info("通过菜单取消定时任务")
             isCountingDown = false
             remainingSeconds = 0
             
@@ -426,12 +432,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 恢复正常状态
             displayNormalStatusItem()
             
+            // 取消系统定时任务
+            cancelSystemTask()
+            
+            // 通知 ContentView 更新状态
+            NotificationCenter.default.post(name: Notification.Name("ForceStatusItemReset"), object: nil)
+            
+            // 更新菜单状态
+            let menu = self.createMenu()
+            self.statusItem?.menu = menu
+            
             // 显示通知
             let notification = NSUserNotification()
             notification.title = SettingsManager.shared.localizedString(for: "cancel_notification_title", defaultValue: "定时已取消")
             notification.informativeText = SettingsManager.shared.localizedString(for: "cancel_notification_text", defaultValue: "定时关机/休眠任务已取消")
             NSUserNotificationCenter.default.deliver(notification)
         }
+    }
+    
+    // 取消系统定时任务
+    func cancelSystemTask() {
+        // 通过通知中心发送取消任务的通知给 ContentView
+        NotificationCenter.default.post(name: Notification.Name("CancelAllTasks"), object: nil)
+        logger.info("已发送取消所有任务的通知")
     }
     
     @objc func openSettings(_ sender: AnyObject?) {

@@ -33,6 +33,7 @@ struct ContentView: View {
     private let shutdownNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectShutdownAction"))
     private let sleepNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectSleepAction"))
     private let refreshViewNotification = NotificationCenter.default.publisher(for: Notification.Name("RefreshContentView"))
+    private let cancelAllTasksNotification = NotificationCenter.default.publisher(for: Notification.Name("CancelAllTasks"))
     
     var body: some View {
        VStack(spacing: 20) {
@@ -193,6 +194,14 @@ struct ContentView: View {
          // 强制刷新界面
          // 更新 refreshID 状态变量来触发界面刷新
          refreshID = UUID()
+      }
+      // 监听取消所有任务的通知
+      .onReceive(cancelAllTasksNotification) { _ in
+         logger.info("接收到取消所有任务的通知")
+         // 取消所有计划任务
+         cancelAllScheduledJobs()
+         // 停止倒计时
+         stopCountdown()
       }
       .onDisappear {
          stopCountdown()
