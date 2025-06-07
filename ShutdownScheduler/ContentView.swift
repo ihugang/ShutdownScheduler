@@ -2,20 +2,20 @@ import SwiftUI
 import OSLog
 import Combine
 
-struct ContentView: View {    
-    // 添加刷新视图的状态变量
-    @State private var refreshID = UUID()
-    
-    // 本地化字符串辅助函数
-    private func localizedString(for key: String, defaultValue: String) -> String {
-        return SettingsManager.shared.localizedString(for: key, defaultValue: defaultValue)
-    }
-    // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
-    var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
-    
-    init(countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil) {
-        self.countdownStateChanged = countdownStateChanged
-    }
+struct ContentView: View {
+      // 添加刷新视图的状态变量
+   @State private var refreshID = UUID()
+   
+      // 本地化字符串辅助函数
+   private func localizedString(for key: String, defaultValue: String) -> String {
+      return SettingsManager.shared.localizedString(for: key, defaultValue: defaultValue)
+   }
+      // 状态变化回调函数类型：isCountingDown, remainingSeconds, actionType
+   var countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil
+   
+   init(countdownStateChanged: ((Bool, Int, ActionType) -> Void)? = nil) {
+      self.countdownStateChanged = countdownStateChanged
+   }
       // 添加日志记录器
    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "ContentView")
    
@@ -29,17 +29,18 @@ struct ContentView: View {
    @State private var commandOutput: String = ""
    @State private var scheduledJobLabels: [String] = []
    @State private var scheduledJobPaths: [String] = []
+   @State private var isDeepSleepModeEnabled: Bool = false
       // 创建通知发布者
-    private let shutdownNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectShutdownAction"))
-    private let sleepNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectSleepAction"))
-    private let refreshViewNotification = NotificationCenter.default.publisher(for: Notification.Name("RefreshContentView"))
-    private let cancelAllTasksNotification = NotificationCenter.default.publisher(for: Notification.Name("CancelAllTasks"))
-    
-    var body: some View {
-       VStack(spacing: 20) {
-          Text(localizedString(for: "app_title", defaultValue: "定时关机/休眠工具"))
-             .font(.headline)
-             .padding(.bottom, 5)
+   private let shutdownNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectShutdownAction"))
+   private let sleepNotification = NotificationCenter.default.publisher(for: Notification.Name("SelectSleepAction"))
+   private let refreshViewNotification = NotificationCenter.default.publisher(for: Notification.Name("RefreshContentView"))
+   private let cancelAllTasksNotification = NotificationCenter.default.publisher(for: Notification.Name("CancelAllTasks"))
+   
+   var body: some View {
+      VStack(spacing: 20) {
+         Text(localizedString(for: "app_title", defaultValue: "定时关机/休眠工具"))
+            .font(.headline)
+            .padding(.bottom, 5)
          
          if isCountingDown {
                // 显示倒计时
@@ -127,6 +128,18 @@ struct ContentView: View {
                }
                .frame(maxWidth: 250)
                
+                  // 深度休眠模式开关
+               Toggle(isOn: $isDeepSleepModeEnabled) {
+                  Text(localizedString(for: "deep_sleep_mode", defaultValue: "深度休眠模式"))
+               }
+               .toggleStyle(SwitchToggleStyle())
+               .frame(maxWidth: 250, alignment: .leading)
+                  // 描述文字
+               Text("此模式将关闭 PowerNap、网络唤醒等系统自动唤醒机制")
+                  .font(.caption)
+                  .foregroundColor(isDeepSleepModeEnabled ? .blue : .gray)
+                  .frame(maxWidth: 250, alignment: .leading)
+               
                   // 按钮
                Button(localizedString(for: "start_countdown", defaultValue: "开始倒计时")) {
                   executeAction(minutes: minutes, actionType: selectedAction)
@@ -155,11 +168,11 @@ struct ContentView: View {
             .font(.caption)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 5)
-                     // 添加日志显示区域
-          if !commandOutput.isEmpty {
-             VStack(alignment: .leading, spacing: 5) {
-                Text("命令日志:")
-                   .font(.caption.bold())
+            // 添加日志显示区域
+         if !commandOutput.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+               Text("命令日志:")
+                  .font(.caption.bold())
                   .frame(maxWidth: .infinity, alignment: .leading)
                
                ScrollView {
@@ -180,33 +193,33 @@ struct ContentView: View {
       .onReceive(shutdownNotification) { _ in
          selectedAction = .shutdown
          minutes = 30
-         // 可选：自动开始倒计时
-         // executeAction(minutes: minutes, actionType: selectedAction)
+            // 可选：自动开始倒计时
+            // executeAction(minutes: minutes, actionType: selectedAction)
       }
       .onReceive(sleepNotification) { _ in
          selectedAction = .sleep
          minutes = 30
-         // 可选：自动开始倒计时
-         // executeAction(minutes: minutes, actionType: selectedAction)
+            // 可选：自动开始倒计时
+            // executeAction(minutes: minutes, actionType: selectedAction)
       }
-      // 监听刷新界面通知，当语言变化时刷新界面
+         // 监听刷新界面通知，当语言变化时刷新界面
       .onReceive(refreshViewNotification) { _ in
-         // 强制刷新界面
-         // 更新 refreshID 状态变量来触发界面刷新
+            // 强制刷新界面
+            // 更新 refreshID 状态变量来触发界面刷新
          refreshID = UUID()
       }
-      // 监听取消所有任务的通知
+         // 监听取消所有任务的通知
       .onReceive(cancelAllTasksNotification) { _ in
          logger.info("接收到取消所有任务的通知")
-         // 取消所有计划任务
+            // 取消所有计划任务
          cancelAllScheduledJobs()
-         // 停止倒计时
+            // 停止倒计时
          stopCountdown()
       }
       .onDisappear {
          stopCountdown()
       }
-      // 使用 refreshID 作为整个视图的 ID，确保语言变化时视图会完全重新创建
+         // 使用 refreshID 作为整个视图的 ID，确保语言变化时视图会完全重新创建
       .id(refreshID)
    }
    
@@ -237,6 +250,33 @@ struct ContentView: View {
          // 先启动倒计时显示，让用户可以看到剩余时间
       startCountdown(seconds: secondsDelay, actionType: actionType)
       
+         // 深度休眠模式设置
+      if isDeepSleepModeEnabled {
+         let disableWakeCmds = [
+            "pmset -a powernap 0",
+            "pmset -a tcpkeepalive 0",
+            "pmset -a womp 0",
+            "pmset -a darkwakes 0",
+            "pmset -a hibernatemode 25"
+         ]
+         for cmd in disableWakeCmds {
+            runTerminalCommand(cmd, log: "应用深度休眠设置")
+         }
+         feedback += "（深度休眠模式已启用）"
+      } else {
+         let revertCmds = [
+            "pmset -a powernap 1",
+            "pmset -a tcpkeepalive 1",
+            "pmset -a womp 1",
+            "pmset -a darkwakes 1",
+            "pmset -a hibernatemode 3"
+         ]
+         for cmd in revertCmds {
+            runTerminalCommand(cmd, log: "恢复默认休眠设置")
+         }
+         feedback += "（使用系统默认休眠设置）"
+      }
+      
       switch actionType {
          case .shutdown:
             actionName = "关机"
@@ -244,7 +284,7 @@ struct ContentView: View {
                // 使用at命令计划关机
             let result = scheduleOneTimeShutdown(atHour: hour, minute: minute)
             if result.success {
-               feedback = "已设置 \(minutes) 分钟后\(actionName)"
+               feedback = "已设置 \(minutes) 分钟后\(actionName)" + (isDeepSleepModeEnabled ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
             } else {
                feedback = "设置\(actionName)失败，可能需要管理员权限"
                appendToCommandOutput("错误: \(result.output)")
@@ -257,7 +297,7 @@ struct ContentView: View {
                // 使用at命令计划休眠
             let result = scheduleOneTimeSleep(atHour: hour, minute: minute)
             if result.success {
-               feedback = "已设置 \(minutes) 分钟后\(actionName)"
+               feedback = "已设置 \(minutes) 分钟后\(actionName)" + (isDeepSleepModeEnabled ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
             } else {
                feedback = "设置\(actionName)失败，可能需要管理员权限"
                appendToCommandOutput("错误: \(result.output)")
@@ -585,6 +625,7 @@ struct ContentView: View {
    func stopCountdown() {
       countdownTimer?.invalidate()
       countdownTimer = nil
+      remainingSeconds = 0
       isCountingDown = false
       
          // 通知状态变化
