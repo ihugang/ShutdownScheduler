@@ -231,79 +231,33 @@ struct ContentView: View {
          feedback = "请输入有效的分钟数"
          return
       }
-      
-      let actionName: String
       let secondsDelay = minutes * 60
-      
-         // 清空之前的命令输出
       commandOutput = ""
-      
-         // 计算目标时间
       let targetTime = Date().addingTimeInterval(TimeInterval(secondsDelay))
       let calendar = Calendar.current
       let hour = calendar.component(.hour, from: targetTime)
       let minute = calendar.component(.minute, from: targetTime)
-      
-         // 显示提示，告知用户需要输入管理员密码
       feedback = "即将设置\(minutes)分钟后\(actionType.rawValue)，需要您输入管理员密码"
-      
-         // 先启动倒计时显示，让用户可以看到剩余时间
-      startCountdown(seconds: secondsDelay, actionType: actionType)
-      
-         // 深度休眠模式设置
+         // 先应用深度休眠设置
       if isDeepSleepModeEnabled {
-         let disableWakeCmds = [
-            "pmset -a powernap 0",
-            "pmset -a tcpkeepalive 0",
-            "pmset -a womp 0",
-            "pmset -a darkwakes 0",
-            "pmset -a hibernatemode 25"
-         ]
-         for cmd in disableWakeCmds {
-            runTerminalCommand(cmd, log: "应用深度休眠设置")
+            // 深度休眠
+         if actionType == .shutdown {
+            scheduleOneTimeShutdownWithSleepMode(atHour: hour, minute: minute, useDeepSleep: true, minutes: minutes)
+         } else {
+            scheduleOneTimeSleepWithSleepMode(atHour: hour, minute: minute, useDeepSleep: true, minutes: minutes)
          }
          feedback += "（深度休眠模式已启用）"
       } else {
-         let revertCmds = [
-            "pmset -a powernap 1",
-            "pmset -a tcpkeepalive 1",
-            "pmset -a womp 1",
-            "pmset -a darkwakes 1",
-            "pmset -a hibernatemode 3"
-         ]
-         for cmd in revertCmds {
-            runTerminalCommand(cmd, log: "恢复默认休眠设置")
+            // 普通休眠
+         if actionType == .shutdown {
+            scheduleOneTimeShutdownWithSleepMode(atHour: hour, minute: minute, useDeepSleep: false, minutes: minutes)
+         } else {
+            scheduleOneTimeSleepWithSleepMode(atHour: hour, minute: minute, useDeepSleep: false, minutes: minutes)
          }
          feedback += "（使用系统默认休眠设置）"
       }
-      
-      switch actionType {
-         case .shutdown:
-            actionName = "关机"
-            
-               // 使用at命令计划关机
-            let result = scheduleOneTimeShutdown(atHour: hour, minute: minute)
-            if result.success {
-               feedback = "已设置 \(minutes) 分钟后\(actionName)" + (isDeepSleepModeEnabled ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
-            } else {
-               feedback = "设置\(actionName)失败，可能需要管理员权限"
-               appendToCommandOutput("错误: \(result.output)")
-               stopCountdown()
-            }
-            
-         case .sleep:
-            actionName = "休眠"
-            
-               // 使用at命令计划休眠
-            let result = scheduleOneTimeSleep(atHour: hour, minute: minute)
-            if result.success {
-               feedback = "已设置 \(minutes) 分钟后\(actionName)" + (isDeepSleepModeEnabled ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
-            } else {
-               feedback = "设置\(actionName)失败，可能需要管理员权限"
-               appendToCommandOutput("错误: \(result.output)")
-               stopCountdown()
-            }
-      }
+         // 启动倒计时（用于UI显示，不再倒计时结束后请求密码）
+      startCountdown(seconds: secondsDelay, actionType: actionType)
    }
    
       // 请求管理员权限并执行命令
@@ -726,25 +680,208 @@ struct ContentView: View {
       
          // 返回结果
       let output = descriptor.stringValue ?? ""
+      
+         // 额外检测权限失败场景
+      if output.lowercased().contains("not privileged") || output.lowercased().contains("permission") {
+         return (false, "权限不足，命令未执行")
+      }
+      
       return (true, output)
    }
    
-      // 运行终端命令
-   func runTerminalCommand(_ command: String, log: String) {
+      // 运行终端命令（已弃用，使用runPrivilegedCommands替代）
+   func runTerminalCommand(_ command: String, log: String, needsPrivilege: Bool = false) {
       logger.info("\(log): \(command)")
-      
-      let script = """
-        do shell script "\(command)"
-        """
-      
+      let script: String
+      if needsPrivilege {
+         script = """
+          do shell script "\(command)" with administrator privileges
+          """
+      } else {
+         script = """
+          do shell script "\(command)"
+          """
+      }
       let result = runAppleScript(script: script)
       appendToCommandOutput("\(log): \(command)")
       appendToCommandOutput("结果: \(result.output)")
+   }
+      // 新增：以管理员权限一次执行多条命令
+   func runPrivilegedCommands(_ commands: [String], log: String) {
+      let joined = commands.joined(separator: " && ")
+      let escaped = joined.replacingOccurrences(of: "\"", with: "\\\"")
+      let script = """
+      do shell script "sh -c \\\"\(escaped)\\\"" with administrator privileges
+      """
+      let result = runAppleScript(script: script)
+      appendToCommandOutput("🔐 \(log)")
+      appendToCommandOutput("结果: \(result.output)")
+   }
+   
+      // 新增：带深度休眠模式的关机任务调度
+   func scheduleOneTimeShutdownWithSleepMode(atHour hour: Int, minute: Int, useDeepSleep: Bool, minutes: Int) {
+      let calendar = Calendar.current
+      var dateComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+      dateComponents.hour = hour
+      dateComponents.minute = minute
+      dateComponents.second = 0
+      guard let targetDate = calendar.date(from: dateComponents) else {
+         feedback = "无法创建目标日期"
+         return
+      }
+      var finalDate = targetDate
+      if finalDate < Date() {
+         finalDate = calendar.date(byAdding: .day, value: 1, to: targetDate) ?? targetDate
+      }
+      let jobLabel = "com.app.shutdownscheduler.shutdown."+UUID().uuidString
+      let tempDir = FileManager.default.temporaryDirectory
+      let plistPath = tempDir.appendingPathComponent("\(jobLabel).plist")
+      let plistContent = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>\(jobLabel)</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>/sbin/shutdown</string>
+                <string>-h</string>
+                <string>now</string>
+            </array>
+            <key>StartCalendarInterval</key>
+            <dict>
+                <key>Hour</key>
+                <integer>\(calendar.component(.hour, from: finalDate))</integer>
+                <key>Minute</key>
+                <integer>\(calendar.component(.minute, from: finalDate))</integer>
+            </dict>
+        </dict>
+        </plist>
+        """
+      do {
+         try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
+      } catch {
+         feedback = "无法创建plist文件: \(error.localizedDescription)"
+         return
+      }
+         // 构造命令
+      var commands: [String] = []
+      if useDeepSleep {
+         commands.append("pmset -a powernap 0")
+         commands.append("pmset -a tcpkeepalive 0")
+         commands.append("pmset -a womp 0")
+         commands.append("pmset -a darkwakes 0")
+         commands.append("pmset -a hibernatemode 25")
+      } else {
+         commands.append("pmset -a powernap 1")
+         commands.append("pmset -a tcpkeepalive 1")
+         commands.append("pmset -a womp 1")
+         commands.append("pmset -a darkwakes 1")
+         commands.append("pmset -a hibernatemode 3")
+      }
+      commands.append("launchctl load \(plistPath.path)")
+      runPrivilegedCommands(commands, log: "设置关机任务及休眠模式")
+      scheduledJobLabels.append(jobLabel)
+      scheduledJobPaths.append(plistPath.path)
+      feedback = "已设置 \(minutes) 分钟后关机" + (useDeepSleep ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
+   }
+   
+      // 新增：带深度休眠模式的休眠任务调度
+   func scheduleOneTimeSleepWithSleepMode(atHour hour: Int, minute: Int, useDeepSleep: Bool, minutes: Int) {
+      let calendar = Calendar.current
+      var dateComponents = calendar.dateComponents([.year, .month, .day], from: Date())
+      dateComponents.hour = hour
+      dateComponents.minute = minute
+      dateComponents.second = 0
+      guard let targetDate = calendar.date(from: dateComponents) else {
+         feedback = "无法创建目标日期"
+         return
+      }
+      var finalDate = targetDate
+      if finalDate < Date() {
+         finalDate = calendar.date(byAdding: .day, value: 1, to: targetDate) ?? targetDate
+      }
+      let jobLabel = "com.app.shutdownscheduler.sleep."+UUID().uuidString
+      let tempDir = FileManager.default.temporaryDirectory
+      let plistPath = tempDir.appendingPathComponent("\(jobLabel).plist")
+      let plistContent = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>\(jobLabel)</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>/usr/bin/pmset</string>
+                <string>sleepnow</string>
+            </array>
+            <key>StartCalendarInterval</key>
+            <dict>
+                <key>Hour</key>
+                <integer>\(calendar.component(.hour, from: finalDate))</integer>
+                <key>Minute</key>
+                <integer>\(calendar.component(.minute, from: finalDate))</integer>
+            </dict>
+        </dict>
+        </plist>
+        """
+      do {
+         try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
+      } catch {
+         feedback = "无法创建plist文件: \(error.localizedDescription)"
+         return
+      }
+         // 构造命令
+      var commands: [String] = []
+      if useDeepSleep {
+         commands.append("pmset -a powernap 0")
+         commands.append("pmset -a tcpkeepalive 0")
+         commands.append("pmset -a womp 0")
+         commands.append("pmset -a darkwakes 0")
+         commands.append("pmset -a hibernatemode 25")
+      } else {
+         commands.append("pmset -a powernap 1")
+         commands.append("pmset -a tcpkeepalive 1")
+         commands.append("pmset -a womp 1")
+         commands.append("pmset -a darkwakes 1")
+         commands.append("pmset -a hibernatemode 3")
+      }
+      commands.append("launchctl load \(plistPath.path)")
+      runPrivilegedCommands(commands, log: "设置休眠任务及休眠模式")
+      scheduledJobLabels.append(jobLabel)
+      scheduledJobPaths.append(plistPath.path)
+      feedback = "已设置 \(minutes) 分钟后休眠" + (useDeepSleep ? "（深度休眠模式已启用）" : "（使用系统默认休眠设置）")
    }
    
       // 添加命令输出到日志区域
    func appendToCommandOutput(_ text: String) {
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
       commandOutput += "[\(timestamp)] \(text)\n"
+   }
+}
+
+   // 应用深度休眠设置和恢复默认休眠设置，移至 ContentView 内部
+
+extension ContentView {
+      // 保留 applyDeepSleepMode 和 revertDefaultSleepMode 以供界面单独调用
+   func applyDeepSleepMode() {
+      runPrivilegedCommands([
+         "pmset -a powernap 0",
+         "pmset -a tcpkeepalive 0",
+         "pmset -a womp 0",
+         "pmset -a darkwakes 0",
+         "pmset -a hibernatemode 25"
+      ], log: "应用深度休眠设置")
+   }
+   func revertDefaultSleepMode() {
+      runPrivilegedCommands([
+         "pmset -a powernap 1",
+         "pmset -a tcpkeepalive 1",
+         "pmset -a womp 1",
+         "pmset -a darkwakes 1",
+         "pmset -a hibernatemode 3"
+      ], log: "恢复默认休眠设置")
    }
 }

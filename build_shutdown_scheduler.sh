@@ -10,6 +10,12 @@ ARCHIVE_PATH="build/${APP_NAME}.xcarchive"
 EXPORT_PATH="build/export"
 EXPORT_OPTIONS_PLIST="ExportOptions.plist"   # 你需自定义或复用现有
 DMG_NAME="${APP_NAME}.dmg"
+
+# Check for existing DMG and backup if found
+if [ -f "${DMG_NAME}" ]; then
+  echo "📁 Existing DMG found. Renaming to ${DMG_NAME}.bak..."
+  mv "${DMG_NAME}" "${DMG_NAME}.bak"
+fi
 CERT_ID="Developer ID Application: Hangzhou Gravity Cyberinfo Co.,Ltd (6X2HSWDZCR)"  # 替换为你实际的证书名称
 NOTARY_PROFILE="AC_PASSWORD"  # 需先用 `xcrun notarytool store-credentials` 配置好
 
