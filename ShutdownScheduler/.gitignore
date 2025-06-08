@@ -1,0 +1,81 @@
+# Xcode
+*.xcworkspace
+*.xcuserdata
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/xcshareddata/WorkspaceSettings.xcsettings
+!default.xcworkspace
+
+# Derived data
+DerivedData/
+build/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/*.log
+
+# Archives
+*.xcarchive
+
+# Application files
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# Playground stuff
+timeline.xctimeline
+playground.xcworkspace
+
+# SwiftPM binary artifacts
+Artifacts.xcarchive
+
+# Crash reports
+*.crash
+
+# .DS_Store and other macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# User-specific files
+*.orig
+*.swp
+
+# Xcode Server
+.xcscmblueprint
+
+# Signing / Provisioning
+*.mobileprovision
+*.provisionprofile
+*.entitlements
+
+# Xcode Previews cache
+.preview-thumbnails
+
+# Logs
+*.log
+
+# Package.resolved
+Package.resolved
+
+# Custom local scripts or builds
+*.local.*
+*.bak
+*.old
