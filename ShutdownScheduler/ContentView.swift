@@ -20,6 +20,7 @@ struct ContentView: View {
    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.app.ShutdownScheduler", category: "ContentView")
    
    @State private var minutes: Int = 30
+   @State private var minutesString: String = "30"
    @State private var feedback: String = ""
    @State private var selectedAction: ActionType = .shutdown
    @State private var isCountingDown: Bool = false
@@ -80,6 +81,7 @@ struct ContentView: View {
                   Button(action: {
                      if minutes > 1 {
                         minutes -= 1
+                        minutesString = "\(minutes)"
                      }
                   }) {
                      Image(systemName: "minus.circle")
@@ -87,9 +89,11 @@ struct ContentView: View {
                   }
                   .buttonStyle(BorderlessButtonStyle())
                   
-                     // 显示当前分钟数
-                  Text("\(minutes)")
-                     .frame(width: 40)
+                     // 分钟数输入框
+                  TextField("", text: $minutesString)
+                     .textFieldStyle(PlainTextFieldStyle())
+                     .multilineTextAlignment(.center)
+                     .frame(width: 60)
                      .padding(.horizontal, 8)
                      .padding(.vertical, 4)
                      .background(Color.gray.opacity(0.1))
@@ -98,10 +102,28 @@ struct ContentView: View {
                         RoundedRectangle(cornerRadius: 6)
                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                      )
+                     .onChange(of: minutesString) { newValue in
+                        // 只允许数字输入
+                        let filtered = newValue.filter { "0123456789".contains($0) }
+                        if filtered != newValue {
+                            minutesString = filtered
+                            return
+                        }
+                        
+                        // 转换为整数并验证范围
+                        if let value = Int(filtered), value >= 1 {
+                            minutes = value
+                        } else if !filtered.isEmpty {
+                            // 如果输入无效（如空或小于1），则重置为1
+                            minutes = 1
+                            minutesString = "1"
+                        }
+                     }
                   
                      // 增加按钮
                   Button(action: {
                      minutes += 1
+                     minutesString = "\(minutes)"
                   }) {
                      Image(systemName: "plus.circle")
                         .foregroundColor(.blue)
